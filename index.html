@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mini Love Game</title>
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #ffe6f0;
+            overflow: hidden;
+            touch-action: none;
+        }
+        #gameContainer {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 800px;
+            max-height: 600px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            border: 2px solid #ff6699;
+            background: #1a1a3d;
+            width: 100%;
+            height: 100%;
+            max-width: 800px;
+            max-height: 600px;
+            object-fit: contain;
+        }
+        #message {
+            display: none;
+            position: absolute;
+            text-align: center;
+            color: #ff3366;
+            font-family: 'Dancing Script', cursive;
+            font-size: 6vw;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 20px;
+            max-width: 90%;
+            z-index: 10;
+            box-shadow: 0 0 20px rgba(255, 102, 153, 0.7);
+            border: 2px solid #ff99cc;
+            opacity: 0;
+            transform: scale(0.5);
+            transition: opacity 1s ease, transform 1s ease;
+        }
+        #message.show {
+            opacity: 1;
+            transform: scale(1);
+        }
+        #shareBtn {
+            display: none;
+            position: absolute;
+            bottom: 20%;
+            background: #ff6699;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 10px 20px;
+            font-size: 4vw;
+            cursor: pointer;
+            z-index: 10;
+            font-family: 'Arial', sans-serif;
+        }
+        #shareBtn:hover {
+            background: #ff3366;
+        }
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 10px;
+            box-sizing: border-box;
+            z-index: 5;
+        }
+        .control-btn {
+            background: #ff6699;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 15px;
+            font-size: 4vw;
+            width: 30%;
+            max-width: 100px;
+            text-align: center;
+            user-select: none;
+            touch-action: manipulation;
+            opacity: 0.8;
+        }
+        .control-btn:active {
+            opacity: 1;
+            background: #ff3366;
+        }
+        #score {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #ff99cc;
+            font-family: 'Arial', sans-serif;
+            font-size: 5vw;
+            z-index: 10;
+        }
+        @media (min-width: 800px) {
+            #message { font-size: 32px; }
+            .control-btn { font-size: 16px; }
+            #score { font-size: 24px; }
+            #shareBtn { font-size: 16px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="message">Darling, you've gathered every heart! My love for you blooms brighter than a thousand stars, my eternal soulmate!</div>
+        <button id="shareBtn">Share Your Victory!</button>
+        <div id="score">Hearts: 0</div>
+        <div id="controls">
+            <div class="control-btn" id="leftBtn">Left</div>
+            <div class="control-btn" id="jumpBtn">Jump</div>
+            <div class="control-btn" id="rightBtn">Right</div>
+        </div>
+    </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const messageDiv = document.getElementById('message');
+        const shareBtn = document.getElementById('shareBtn');
+        const scoreDiv = document.getElementById('score');
+
+        // Set canvas size dynamically
+        function resizeCanvas() {
+            const container = document.getElementById('gameContainer');
+            const spacing = 10;
+            const aspectRatio = 800 / 600;
+            let width = container.clientWidth - spacing;
+            let height = container.clientHeight - spacing;
+            if (width / height > aspectRatio) {
+                width = height * aspectRatio;
+            } else {
+                height = width / aspectRatio;
+            }
+            canvas.width = 800;
+            canvas.height = 600;
+            canvas.style.width = `${width}px`;
+            canvas.style.height = `${height}px`;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Player object
+        const player = {
+            x: 50,
+            y: 500,
+            width: 30,
+            height: 30,
+            speed: 5,
+            dy: 0,
+            gravity: 0.5,
+            jumpPower: -16,
+            isJumping: false,
+            doubleJump: false,
+            jumpsLeft: 1,
+            animFrame: 0,
+            animColors: ['#ff3366', '#ff6699', '#ff99cc']
+        };
+
+        // Levels
+        const levels = [
+            {
+                platforms: [
+                    { x: 0, y: 550, width: 800, height: 50, parallax: 0 },
+                    { x: 200, y: 450, width: 200, height: 20, parallax: 0.2 },
+                    { x: 500, y: 350, width: 200, height: 20, parallax: 0.4 },
+                    { x: 100, y: 250, width: 200, height: 20, parallax: 0.6 }
+                ],
+                hearts: [
+                    { x: 250, y: 400, collected: false, animScale: 1, animAlpha: 1 },
+                    { x: 550, y: 300, collected: false, animScale: 1, animAlpha: 1 },
+                    { x: 150, y: 200, collected: false, animScale: 1, animAlpha: 1 }
+                ]
+            },
+            {
+                platforms: [
+                    { x: 0, y: 550, width: 800, height: 50, parallax: 0 },
+                    { x: 300, y: 400, width: 200, height: 20, parallax: 0.2 },
+                    { x: 100, y: 300, width: 200, height: 20, parallax: 0.4 },
+                    { x: 600, y: 200, width: 200, height: 20, parallax: 0.6 }
+                ],
+                hearts: [
+                    { x: 350, y: 350, collected: false, animScale: 1, animAlpha: 1 },
+                    { x: 150, y: 250, collected: false, animScale: 1, animAlpha: 1 },
+                    { x: 650, y: 150, collected: false, animScale: 1, animAlpha: 1 },
+                    { x: 400, y: 500, collected: false, animScale: 1, animAlpha: 1 }
+                ]
+            }
+        ];
+
+        let currentLevel = 0;
+        let platforms = levels[currentLevel].platforms;
+        let hearts = levels[currentLevel].hearts;
+
+        // Power-up
+        let powerUp = { x: 400, y: 500, active: true, type: 'doubleJump' };
+
+        // Background elements
+        let clouds = [
+            { x: 100, y: 50, size: 50, speed: 0.5 },
+            { x: 400, y: 100, size: 70, speed: 0.3 },
+            { x: 700, y: 80, size: 60, speed: 0.4 }
+        ];
+        let stars = Array(50).fill().map(() => ({
+            x: Math.random() * 800,
+            y: Math.random() * 300,
+            size: Math.random() * 2 + 1,
+            twinkle: Math.random()
+        }));
+
+        // Particles and screen shake
+        let particles = [];
+        let victoryParticles = [];
+        let victoryTriggered = false;
+        let shake = { x: 0, y: 0, duration: 0 };
+
+        // Score
+        let score = 0;
+
+        // Audio context
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(frequency, type, duration) {
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.type = type;
+            oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+            gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.currentTime ? audioCtx.destination : audioCtx.createMediaStreamDestination());
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + duration);
+        }
+
+        // Share screenshot
+        function shareScreenshot() {
+            const dataUrl = canvas.toDataURL('image/png');
+            const blob = dataURLToBlob(dataUrl);
+            const file = new File([blob], 'love-game-victory.png', { type: 'image/png' });
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+                navigator.share({
+                    files: [file],
+                    title: 'Mini Love Game Victory',
+                    text: 'I completed the Mini Love Game and collected all the hearts!'
+                }).catch(err => console.error('Share failed:', err));
+            } else {
+                const link = document.createElement('a');
+                link.href = dataUrl;
+                link.download = 'love-game-victory.png';
+                link.click();
+            }
+        }
+
+        function dataURLToBlob(dataURL) {
+            const [header, data] = dataURL.split(',');
+            const binary = atob(data);
+            const array = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+                array[i] = binary.charCodeAt(i);
+            }
+            return new Blob([array], { type: header.match(/:(.*?);/)[1] });
+        }
+
+        shareBtn.addEventListener('click', shareScreenshot);
+
+        // Particle systems
+        function createParticles(x, y) {
+            for (let i = 0; i < 10; i++) {
+                particles.push({
+                    x: x + 15,
+                    y: y + 15,
+                    vx: (Math.random() - 0.5) * 5,
+                    vy: (Math.random() - 0.5) * 5,
+                    life: 30,
+                    size: Math.random() * 5 + 2
+                });
+            }
+        }
+
+        function createVictoryParticles() {
+            for (let i = 0; i < 100; i++) {
+                victoryParticles.push({
+                    x: 400,
+                    y: 300,
+                    vx: (Math.random() - 0.5) * 15,
+                    vy: (Math.random() - 0.5) * 15,
+                    life: 90,
+                    size: Math.random() * 6 + 4
+                });
+            }
+        }
+
+        // Controls
+        const keys = { left: false, right: false, jump: false };
+
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'ArrowLeft') keys.left = true;
+            if (e.code === 'ArrowRight') keys.right = true;
+            if (e.code === 'Space' && (player.jumpsLeft > 0)) {
+                keys.jump = true;
+                player.dy = player.jumpPower;
+                player.jumpsLeft--;
+                if (player.jumpsLeft === 0) player.isJumping = true;
+                playSound(440, 'sine', 0.2);
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'ArrowLeft') keys.left = false;
+            if (e.code === 'ArrowRight') keys.right = false;
+            if (e.code === 'Space') keys.jump = false;
+        });
+
+        // Touch controls
+        const leftBtn = document.getElementById('leftBtn');
+        const rightBtn = document.getElementById('rightBtn');
+        const jumpBtn = document.getElementById('jumpBtn');
+
+        leftBtn.addEventListener('touchstart', () => { keys.left = true; });
+        leftBtn.addEventListener('touchend', () => { keys.left = false; });
+        rightBtn.addEventListener('touchstart', () => { keys.right = true; });
+        rightBtn.addEventListener('touchend', () => { keys.right = false; });
+        jumpBtn.addEventListener('touchstart', () => {
+            if (player.jumpsLeft > 0) {
+                keys.jump = true;
+                player.dy = player.jumpPower;
+                player.jumpsLeft--;
+                if (player.jumpsLeft === 0) player.isJumping = true;
+                playSound(440, 'sine', 0.2);
+            }
+        });
+        jumpBtn.addEventListener('touchend', () => { keys.jump = false; });
+
+        [leftBtn, rightBtn, jumpBtn].forEach(btn => {
+            btn.addEventListener('touchstart', (e) => e.preventDefault());
+            btn.addEventListener('touchend', (e) => e.preventDefault());
+        });
+
+        // Game loop
+        let lastTime = 0;
+        function update(time) {
+            const delta = time - lastTime;
+            lastTime = time;
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Apply screen shake
+            ctx.save();
+            if (shake.duration > 0) {
+                ctx.translate(shake.x * (Math.random() - 0.5), shake.y * (Math.random() - 0.5));
+                shake.duration -= delta;
+            }
+
+            // Draw background (starry sky)
+            ctx.fillStyle = '#1a1a3d';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            stars.forEach(star => {
+                star.twinkle += delta * 0.001;
+                ctx.fillStyle = `rgba(255, 255, 255, ${Math.abs(Math.sin(star.twinkle))})`;
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Draw clouds
+            clouds.forEach(cloud => {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.beginPath();
+                ctx.arc(cloud.x, cloud.y, cloud.size, 0, Math.PI * 2);
+                ctx.fill();
+                cloud.x += cloud.speed;
+                if (cloud.x > canvas.width + cloud.size) cloud.x = -cloud.size;
+            });
+
+            // Move player
+            if (keys.left && player.x > 0) player.x -= player.speed;
+            if (keys.right && player.x < canvas.width - player.width) player.x += player.speed;
+
+            // Apply gravity
+            player.dy += player.gravity;
+            player.y += player.dy;
+
+            // Update player animation
+            player.animFrame = (player.animFrame + delta * 0.01) % player.animColors.length;
+
+            // Check platform collisions
+            player.isJumping = true;
+            player.jumpsLeft = player.doubleJump ? 2 : 1;
+            for (let platform of platforms) {
+                if (
+                    player.x < platform.x + platform.width &&
+                    player.x + player.width > platform.x &&
+                    player.y + player.height > platform.y &&
+                    player.y + player.height < platform.y + platform.height &&
+                    player.dy > 0
+                ) {
+                    player.y = platform.y - player.height;
+                    player.dy = 0;
+                    player.isJumping = false;
+                    player.jumpsLeft = player.doubleJump ? 2 : 1;
+                }
+                platform.x -= (keys.right - keys.left) * platform.parallax;
+                if (platform.x < -platform.width) platform.x += canvas.width + platform.width;
+                if (platform.x > canvas.width) platform.x -= canvas.width + platform.width;
+            }
+
+            // Keep player in bounds
+            if (player.y > canvas.height - player.height) {
+                player.y = canvas.height - player.height;
+                player.dy = 0;
+                player.isJumping = false;
+                player.jumpsLeft = player.doubleJump ? 2 : 1;
+            }
+
+            // Check heart collisions
+            hearts.forEach(heart => {
+                if (!heart.collected &&
+                    player.x < heart.x + 20 &&
+                    player.x + player.width > heart.x &&
+                    player.y < heart.y + 20 &&
+                    player.y + player.height > heart.y) {
+                    heart.collected = true;
+                    heart.animScale = 1.5;
+                    heart.animAlpha = 1;
+                    score++;
+                    scoreDiv.textContent = `Hearts: ${score}`;
+                    createParticles(heart.x, heart.y);
+                    shake.duration = 100;
+                    shake.x = 10;
+                    shake.y = 10;
+                    playSound(880, 'sine', 0.3);
+                }
+                if (heart.collected && heart.animAlpha > 0) {
+                    heart.animScale += delta * 0.01;
+                    heart.animAlpha -= delta * 0.005;
+                }
+            });
+
+            // Check power-up collision
+            if (powerUp.active &&
+                player.x < powerUp.x + 20 &&
+                player.x + player.width > powerUp.x &&
+                player.y < powerUp.y + 20 &&
+                player.y + player.height > powerUp.y) {
+                powerUp.active = false;
+                player.doubleJump = true;
+                createParticles(powerUp.x, powerUp.y);
+                playSound(660, 'sine', 0.3);
+            }
+
+            // Update and draw particles
+            particles = particles.filter(p => p.life > 0);
+            particles.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                ctx.fillStyle = `rgba(255, 204, 204, ${p.life / 30})`;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Draw victory particles
+            if (victoryTriggered) {
+                victoryParticles = victoryParticles.filter(p => p.life > 0);
+                victoryParticles.forEach(p => {
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.life--;
+                    ctx.save();
+                    ctx.globalAlpha = p.life / 90;
+                    ctx.translate(p.x, p.y);
+                    ctx.scale(p.size / 5, p.size / 5);
+                    ctx.fillStyle = '#ff99cc';
+                    ctx.beginPath();
+                    ctx.moveTo(0, -5);
+                    ctx.bezierCurveTo(5, -10, 10, 0, 0, 10);
+                    ctx.bezierCurveTo(-10, 0, -5, -10, 0, -5);
+                    ctx.fill();
+                    ctx.restore();
+                });
+            }
+
+            // Draw platforms
+            ctx.fillStyle = '#669966';
+            platforms.forEach(platform => {
+                ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+            });
+
+            // Draw power-up
+            if (powerUp.active) {
+                ctx.save();
+                ctx.translate(powerUp.x + 10, powerUp.y + 10);
+                ctx.scale(1.2, 1.2);
+                ctx.translate(-10, -10);
+                ctx.fillStyle = '#ffcc00';
+                ctx.beginPath();
+                ctx.moveTo(10, 0);
+                ctx.bezierCurveTo(15, -5, 20, 5, 10, 15);
+                ctx.bezierCurveTo(0, 5, 5, -5, 10, 0);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // Draw player
+            ctx.fillStyle = player.animColors[Math.floor(player.animFrame)];
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+
+            // Draw hearts
+            hearts.forEach(heart => {
+                if (!heart.collected || heart.animAlpha > 0) {
+                    ctx.save();
+                    ctx.globalAlpha = heart.animAlpha;
+                    ctx.translate(heart.x + 10, heart.y + 10);
+                    ctx.scale(heart.animScale, heart.animScale);
+                    ctx.translate(-10, -10);
+                    ctx.fillStyle = '#ff99cc';
+                    ctx.beginPath();
+                    ctx.moveTo(10, 0);
+                    ctx.bezierCurveTo(15, -5, 20, 5, 10, 15);
+                    ctx.bezierCurveTo(0, 5, 5, -5, 10, 0);
+                    ctx.fill();
+                    ctx.restore();
+                }
+            });
+
+            // Check level completion
+            if (hearts.every(heart => heart.collected)) {
+                if (currentLevel < levels.length - 1) {
+                    currentLevel++;
+                    platforms = levels[currentLevel].platforms;
+                    hearts = levels[currentLevel].hearts;
+                    player.x = 50;
+                    player.y = 500;
+                    player.dy = 0;
+                    powerUp = { x: 400, y: 500, active: true, type: 'doubleJump' };
+                } else {
+                    if (!victoryTriggered) {
+                        createVictoryParticles();
+                        victoryTriggered = true;
+                    }
+                    messageDiv.style.display = 'block';
+                    messageDiv.classList.add('show');
+                    shareBtn.style.display = 'block';
+                }
+            }
+
+            ctx.restore();
+            requestAnimationFrame(update);
+        }
+
+        // Start game
+        requestAnimationFrame(update);
+    </script>
+</body>
+</html>
